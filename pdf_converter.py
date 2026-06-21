@@ -53,15 +53,28 @@ def download_language_pack(lang_code: str, tessdata_path: str) -> bool:
             return True
         
         print(f"正在下载语言包: {lang_code}...")
-        url = f"https://raw.githubusercontent.com/UB-Mannheim/tesseract/master/tessdata/{lang_code}.traineddata"
         
-        try:
-            urllib.request.urlretrieve(url, lang_file)
-            print(f"✓ 语言包下载成功: {lang_file}")
-            return True
-        except Exception as e:
-            print(f"✗ 下载失败: {str(e)}")
-            return False
+        # 尝试多个源
+        urls = [
+            f"https://github.com/UB-Mannheim/tesseract/raw/master/tessdata/{lang_code}.traineddata",
+            f"https://raw.githubusercontent.com/UB-Mannheim/tesseract/master/tessdata/{lang_code}.traineddata",
+            f"https://github.com/tesseract-ocr/tessdata/raw/main/{lang_code}.traineddata",
+        ]
+        
+        last_error = None
+        for url in urls:
+            try:
+                print(f"  尝试下载源: {url}")
+                urllib.request.urlretrieve(url, lang_file)
+                print(f"✓ 语言包下载成功: {lang_file}")
+                return True
+            except Exception as e:
+                last_error = str(e)
+                print(f"  此源下载失败，尝试下一个...")
+                continue
+        
+        print(f"✗ 所有源均下载失败: {last_error}")
+        return False
             
     except Exception as e:
         print(f"✗ 错误: {str(e)}")
@@ -158,11 +171,21 @@ class ConversionWorker(QThread):
             # 检查和下载语言包
             lang_file = os.path.join(self.tessdata_path, f"{self.ocr_lang}.traineddata")
             if not os.path.exists(lang_file):
-                self.message.emit(f"  → 下载OCR语言包: {self.ocr_lang}...")
+                self.message.emit(f"  → 准备OCR语言包: {self.ocr_lang}...")
                 if not download_language_pack(self.ocr_lang, self.tessdata_path):
-                    self.message.emit(f"  ✗ 语言包下载失败，请手动下载")
-                    raise Exception(f"无法获取OCR语言包: {self.ocr_lang}")
-                self.message.emit(f"  ✓ 语言包已准备")
+                    self.message.emit(f"  ⚠ 语言包下载失败，尝试使用英文...")
+                    # 降级到英文尝试
+                    if self.ocr_lang != 'eng':
+                        eng_file = os.path.join(self.tessdata_path, "eng.traineddata")
+                        if os.path.exists(eng_file):
+                            self.message.emit(f"  ✓ 使用英文OCR")
+                            self.ocr_lang = 'eng'
+                        else:
+                            raise Exception(f"无法获取OCR语言包，请检查Tesseract安装")
+                    else:
+                        raise Exception(f"英文语言包也不可用")
+                else:
+                    self.message.emit(f"  ✓ 语言包已准备")
             
             # 创建临时目录存放图片
             temp_dir = tempfile.mkdtemp()
@@ -455,27 +478,29 @@ class PDFConverterUI(QMainWindow):
   <li>• 处理时间较长</li>
   <li>• 适合扫描件、图片PDF</li>
   <li>• 无法识别时仅保存图片</li>
+  <li>• 如果语言包下载失败，会自动降级使用英文</li>
 </ul>
 
 <h4>系统要求:</h4>
 <ul>
   <li>• Python 3.7+</li>
   <li>• Tesseract-OCR (自动配置和下载)</li>
+  <li>• 网络连接（用于下载语言包）</li>
 </ul>
 
 <h4>常见问题:</h4>
-<p><b>Q: 为什么输出没有文件？</b></p>
+<p><b>Q: 语言包下载失败怎么办？</b></p>
 <ul>
-  <li>• 检查输出目录是否存在并有写入权限</li>
-  <li>• 查看日志了解详细错误信息</li>
-  <li>• 尝试勾选OCR选项重新转换</li>
+  <li>• 检查网络连接</li>
+  <li>• 程序会自动降级使用英文OCR</li>
+  <li>• 如果需要中文，请手动下载语言包到 C:\\Program Files\\Tesseract-OCR\\tessdata</li>
 </ul>
 
-<p><b>Q: OCR识别错误？</b></p>
+<p><b>Q: 如何手动下载语言包？</b></p>
 <ul>
-  <li>• 第一次使用会自动下载语言包（需要网络）</li>
-  <li>• 确保选择了正确的文档语言</li>
-  <li>• 尝试提高DPI值以提高识别准确度</li>
+  <li>• 从以下链接下载: https://github.com/tesseract-ocr/tessdata/tree/main</li>
+  <li>• 放在: C:\\Program Files\\Tesseract-OCR\\tessdata</li>
+  <li>• 例如: chi_sim.traineddata（中文简体）</li>
 </ul>
         """)
         layout.addWidget(info_text)
