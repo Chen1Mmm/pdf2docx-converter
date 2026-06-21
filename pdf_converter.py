@@ -138,6 +138,7 @@ class PDFConverterUI(QMainWindow):
         super().__init__()
         self.pdf_files: List[str] = []
         self.worker = None
+        self.convert_btn = None  # 保存按钮引用
         self.init_ui()
         
     def init_ui(self):
@@ -280,11 +281,11 @@ class PDFConverterUI(QMainWindow):
         control_layout = QHBoxLayout()
         control_layout.addStretch()
         
-        convert_btn = QPushButton("开始转换")
-        convert_btn.setMinimumHeight(40)
-        convert_btn.setMinimumWidth(120)
-        convert_btn.clicked.connect(self.start_conversion)
-        control_layout.addWidget(convert_btn)
+        self.convert_btn = QPushButton("开始转换")
+        self.convert_btn.setMinimumHeight(40)
+        self.convert_btn.setMinimumWidth(120)
+        self.convert_btn.clicked.connect(self.start_conversion)
+        control_layout.addWidget(self.convert_btn)
         
         layout.addLayout(control_layout)
         
@@ -419,7 +420,7 @@ class PDFConverterUI(QMainWindow):
             return
         
         # 禁用按钮
-        self.sender().setEnabled(False)
+        self.convert_btn.setEnabled(False)
         
         # 获取OCR选项
         use_ocr = self.ocr_checkbox.isChecked()
@@ -442,7 +443,7 @@ class PDFConverterUI(QMainWindow):
         )
         self.worker.progress.connect(self.on_progress)
         self.worker.message.connect(self.on_message)
-        self.worker.finished.connect(lambda success: self.on_finished(success, self.sender()))
+        self.worker.finished.connect(self.on_finished)
         self.worker.start()
         
         self.progress_label.setText("正在转换...")
@@ -457,9 +458,9 @@ class PDFConverterUI(QMainWindow):
         self.progress_label.setText(message)
         self.log_text.append(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
     
-    def on_finished(self, success, button):
+    def on_finished(self, success):
         """转换完成"""
-        button.setEnabled(True)
+        self.convert_btn.setEnabled(True)
         if success:
             self.progress_label.setText("转换完成!")
             output_dir = self.output_label.text()
